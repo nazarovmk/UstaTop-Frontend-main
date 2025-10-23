@@ -1,13 +1,14 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 
 interface UserData {
-  firstName: string;
-  lastName: string;
-  email: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
   phone?: string;
   avatar?: string;
   uid?: string;
-  token?: string;
+  accessToken?: string;
+  refreshToken?: string;
   [key: string]: unknown;
 }
 
@@ -25,15 +26,11 @@ interface AuthContextType {
 }
 
 const API_URL = "http://89.117.60.117:3001/api/v1";
-
-// ❗️ Bu yerda `undefined`dan boshlaymiz
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth contextdan tashqarida chaqirildi");
-  }
+  if (!context) throw new Error("useAuth contextdan tashqarida chaqirildi");
   return context;
 }
 
@@ -41,7 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 🚀 LocalStorage’dan userni yuklash
+  // LocalStorage’dan userni olish
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
@@ -50,7 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(false);
   }, []);
 
-  // 🚀 Register
+  // 🟢 Signup
   async function signup(
     email: string,
     password: string,
@@ -59,31 +56,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   ) {
     const res = await fetch(`${API_URL}/client/signup`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        email,
-        password,
-        firstName,
-        lastName,
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, firstName, lastName }),
     });
 
     const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Ro'yxatdan o'tishda xatolik");
 
-    if (!res.ok) {
-      console.error("Signup error:", data);
-      throw new Error(data.message || "Ro'yxatdan o'tishda xatolik");
-    }
-
-    const userData = { ...data.user, token: data.token };
+    // Backend signup javobi agar token qaytarsa
+    const userData = {
+      ...data.user,
+      accessToken: data.accessToken || data.token,
+      refreshToken: data.refreshToken || null,
+    };
     localStorage.setItem("user", JSON.stringify(userData));
     setCurrentUser(userData);
   }
 
-  // 🚀 Login
+  // 🟢 Login
   async function login(email: string, password: string) {
     const res = await fetch(`${API_URL}/client/signin`, {
       method: "POST",
@@ -92,19 +82,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     const data = await res.json();
-    console.log("Login javobi:", data); // Xato haqida ma'lumot
+    console.log("🔑 Login javobi:", data);
+
     if (!res.ok) throw new Error(data.message || "Login xatolik");
 
+    // ✅ To‘g‘ri joydan tokenlarni olish
     const userData = {
-      ...data.user,
-      token: data.token,
+      email,
+      accessToken: data.data?.accessToken,
+      refreshToken: data.data?.refreshToken,
     };
 
+    // ✅ Tokenlarni saqlash
     localStorage.setItem("user", JSON.stringify(userData));
     setCurrentUser(userData);
   }
 
-  // 🚀 Logout
+  // 🟢 Logout
   function logout() {
     localStorage.removeItem("user");
     setCurrentUser(null);
